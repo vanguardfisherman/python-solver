@@ -1,4 +1,4 @@
-from pulp import LpMaximize, LpProblem, LpVariable, LpStatus, value
+from pulp import LpMaximize, LpMinimize, LpProblem, LpVariable, LpStatus, value
 from scipy.optimize import linprog
 
 try:
@@ -18,7 +18,7 @@ ALGORITMOS_DISPONIBLES = {
     'simplex': "Método Simplex",
     'punto_interior': "Método de Pivoteo Interior",
     'programacion_entera': "Programación Entera",
-    'dantzig_wolfe': "Descomposición de Dantzig-Wolfe",
+    'algoritmo_dual': "Método Dual",
     'relajacion_lagrangiana': "Relajación Lagrangiana",
     'auto': "Selección automática"
 }
@@ -107,7 +107,7 @@ def seleccionar_algoritmo():
         '1': 'simplex',
         '2': 'punto_interior',
         '3': 'programacion_entera',
-        '4': 'dantzig_wolfe',
+        '4': 'algoritmo_dual',
         '5': 'relajacion_lagrangiana',
         '6': 'auto'
     }
@@ -116,7 +116,7 @@ def seleccionar_algoritmo():
     _imprimir("1. Método Simplex")
     _imprimir("2. Método de Pivoteo Interior (Método de Punto Interior)")
     _imprimir("3. Método de Programación Entera (Branch and Bound)")
-    _imprimir("4. Método de Descomposición de Dantzig-Wolfe")
+    _imprimir("4. Método Dual")
     _imprimir("5. Método de Relajación Lagrangiana")
     _imprimir("6. Selección automática (si no sabes qué elegir)")
 
@@ -358,27 +358,118 @@ def resolver_con_programacion_entera(coef_objetivo, restricciones, tipo_restricc
     )
 
 
-def resolver_con_dantzig_wolfe(*_args, **_kwargs):
-    return _resultado_base(
-        'dantzig_wolfe',
-        False,
-        'NotImplemented',
-        mensaje=(
-            "El método de Descomposición de Dantzig-Wolfe aún no está implementado. "
-            "Puedes seleccionar otro algoritmo mientras se desarrolla esta característica."
+def _normalizar_restricciones_en_menor_igual(restricciones, tipo_restricciones, valores_restricciones):
+    restricciones_normalizadas = []
+    valores_normalizados = []
+
+    for coefs, signo, rhs in zip(restricciones, tipo_restricciones, valores_restricciones):
+        if signo == '<=':
+            restricciones_normalizadas.append(list(coefs))
+            valores_normalizados.append(rhs)
+        elif signo == '>=':
+            restricciones_normalizadas.append([-coef for coef in coefs])
+            valores_normalizados.append(-rhs)
+        else:  # '=' se descompone en dos restricciones
+            restricciones_normalizadas.append(list(coefs))
+            valores_normalizados.append(rhs)
+            restricciones_normalizadas.append([-coef for coef in coefs])
+            valores_normalizados.append(-rhs)
+
+    return restricciones_normalizadas, valores_normalizados
+
+
+def resolver_con_algoritmo_dual(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
+    restricciones_canonicas, rhs_canonicos = _normalizar_restricciones_en_menor_igual(
+        restricciones, tipo_restricciones, valores_restricciones
+    )
+
+    if not restricciones_canonicas:
+        return _resultado_base(
+            'algoritmo_dual',
+            False,
+            'Sin restricciones',
+            mensaje='El método dual requiere al menos una restricción para construir el problema dual.'
         )
+
+    prob = LpProblem("Metodo_Dual", LpMinimize)
+    dual_vars = [LpVariable(f"y{i+1}", lowBound=0) for i in range(len(restricciones_canonicas))]
+
+    prob += sum(b * y for b, y in zip(rhs_canonicos, dual_vars)), "Funcion_Objetivo_Dual"
+
+    for idx_var in range(len(coef_objetivo)):
+        expr = sum(restriccion[idx_var] * dual_vars[idx] for idx, restriccion in enumerate(restricciones_canonicas))
+        prob += expr >= coef_objetivo[idx_var], f"cota_variable_{idx_var + 1}"
+
+    prob.solve()
+    estado = LpStatus.get(prob.status, "Inconnu")
+    if estado == "Optimal":
+        valores_duales = {var.name: var.varValue for var in dual_vars}
+        valor_objetivo = value(prob.objective)
+        mensaje = (
+            "El método dual se resolvió correctamente. Puedes interpretar estas variables como"
+            " precios sombra asociados a las restricciones originales."
+        )
+        return _resultado_base(
+            'algoritmo_dual',
+            True,
+            estado,
+            variables=valores_duales,
+            valor_objetivo=valor_objetivo,
+            mensaje=mensaje
+        )
+
+    return _resultado_base(
+        'algoritmo_dual',
+        False,
+        estado,
+        mensaje='No se pudo encontrar una solución dual factible con los datos proporcionados.'
     )
 
 
-def resolver_con_relajacion_lagrangiana(*_args, **_kwargs):
+def resolver_con_relajacion_lagrangiana(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
+    restricciones_canonicas, rhs_canonicos = _normalizar_restricciones_en_menor_igual(
+        restricciones, tipo_restricciones, valores_restricciones
+    )
+
+    prob = LpProblem("Relajacion_Lagrangiana", LpMaximize)
+    variables = [LpVariable(f"x{i+1}", lowBound=0, cat='Continuous') for i in range(len(coef_objetivo))]
+    slacks = [LpVariable(f"s_relaj_{i+1}", lowBound=0, cat='Continuous') for i in range(len(restricciones_canonicas))]
+
+    penalizacion = max(10.0, 10 * sum(abs(c) for c in coef_objetivo) or 1.0)
+    prob += (
+        sum(coef * var for coef, var in zip(coef_objetivo, variables))
+        - penalizacion * sum(slacks)
+    ), "Funcion_Objetivo_Relajada"
+
+    for idx, (coefs, rhs) in enumerate(zip(restricciones_canonicas, rhs_canonicos)):
+        expr = sum(coef * var for coef, var in zip(coefs, variables))
+        prob += expr <= rhs + slacks[idx], f"Restriccion_relajada_{idx + 1}"
+
+    prob.solve()
+    estado = LpStatus.get(prob.status, "Inconnu")
+    if estado == "Optimal":
+        valores = {var.name: var.varValue for var in variables}
+        violaciones = {var.name: var.varValue for var in slacks}
+        violaciones_activas = {k: v for k, v in violaciones.items() if v and v > 1e-6}
+        mensaje = "Resolución con relajación lagrangiana y penalización de violaciones."
+        if violaciones_activas:
+            mensaje += f" Restricciones con holgura positiva: {violaciones_activas}."
+        else:
+            mensaje += " No se observaron violaciones significativas."
+        return _resultado_base(
+            'relajacion_lagrangiana',
+            True,
+            estado,
+            variables=valores,
+            valor_objetivo=value(prob.objective),
+            mensaje=mensaje
+        )
+
     return _resultado_base(
         'relajacion_lagrangiana',
         False,
-        'NotImplemented',
-        mensaje=(
-            "El método de Relajación Lagrangiana aún no está implementado. "
-            "Puedes seleccionar otro algoritmo mientras se desarrolla esta característica."
-        )
+        estado,
+        mensaje='No se logró resolver la relajación lagrangiana con los parámetros actuales.'
     )
 
 # Función para resolver el problema automáticamente
@@ -388,9 +479,9 @@ def seleccionar_algoritmo_automaticamente(tipo_variables, restricciones):
     elif todas_las_variables_son_enteras(tipo_variables):
         return "programacion_entera"
     elif problema_de_gran_escala(restricciones, len(tipo_variables)):
-        return "dantzig_wolfe"
+        return "relajacion_lagrangiana"
     else:
-        return "punto_interior"
+        return "algoritmo_dual"
 
 # Funciones auxiliares
 
@@ -417,7 +508,7 @@ def resolver_modelo(coef_objetivo, restricciones, tipo_restricciones, valores_re
         'simplex': resolver_simplex,
         'punto_interior': resolver_con_punto_interior,
         'programacion_entera': resolver_con_programacion_entera,
-        'dantzig_wolfe': resolver_con_dantzig_wolfe,
+        'algoritmo_dual': resolver_con_algoritmo_dual,
         'relajacion_lagrangiana': resolver_con_relajacion_lagrangiana
     }
 

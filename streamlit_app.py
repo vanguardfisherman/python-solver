@@ -17,6 +17,32 @@ st.write(
     "ejecuta el algoritmo que prefieras sin salir del navegador."
 )
 
+st.markdown(
+    """
+    <style>
+    div.stButton > button:first-child {
+        border-radius: 999px;
+        background: linear-gradient(120deg, #6366f1, #8b5cf6);
+        color: white;
+        border: none;
+        padding: 0.6em 1.6em;
+        font-weight: 600;
+        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    div.stButton > button:first-child:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    }
+    div.stButton > button:first-child:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 with st.sidebar:
     st.header("Parámetros generales")
     num_variables = int(
@@ -31,7 +57,7 @@ with st.sidebar:
         "Método Simplex": "simplex",
         "Método de Pivoteo Interior": "punto_interior",
         "Programación Entera": "programacion_entera",
-        "Descomposición de Dantzig-Wolfe": "dantzig_wolfe",
+        "Método Dual": "algoritmo_dual",
         "Relajación Lagrangiana": "relajacion_lagrangiana",
     }
     algoritmo_label = st.selectbox("Algoritmo", list(opciones_algoritmo.keys()))
@@ -92,7 +118,12 @@ with st.form("configuracion_modelo"):
         )
         valores_restricciones.append(float(rhs))
 
-    submitted = st.form_submit_button("Resolver")
+    submitted = st.form_submit_button(
+        "Resolver modelo",
+        use_container_width=True,
+        help="Ejecuta el algoritmo seleccionado con los parámetros configurados.",
+        type="primary",
+    )
 
 st.subheader("Resumen del modelo")
 if coef_objetivo:
