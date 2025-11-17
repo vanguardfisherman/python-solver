@@ -1,0 +1,4 @@
+Estado: Optimal
+Cantidad óptima de producto 1 (x1): 0.0
+Cantidad óptima de producto 2 (x2): 33.333333
+Ganancia máxima: 166.66666500000002
