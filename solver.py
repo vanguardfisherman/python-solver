@@ -14,15 +14,6 @@ except ImportError:  # pragma: no cover - degradado amable si rich no está inst
 
 console = Console() if Console else None
 
-ALGORITMOS_DISPONIBLES = {
-    'simplex': "Método Simplex",
-    'punto_interior': "Método de Pivoteo Interior",
-    'programacion_entera': "Programación Entera",
-    'dantzig_wolfe': "Descomposición de Dantzig-Wolfe",
-    'relajacion_lagrangiana': "Relajación Lagrangiana",
-    'auto': "Selección automática"
-}
-
 
 def _imprimir(texto, style=None):
     if console:
@@ -62,21 +53,6 @@ def _solicitar_lista_floats(mensaje):
         except ValueError:
             _imprimir("Ingrese números válidos separados por espacio.", style="bold red")
 
-
-def _formatear_variables(valores):
-    return {f"x{i + 1}": valor for i, valor in enumerate(valores)}
-
-
-def _resultado_base(metodo, exito, estado, variables=None, valor_objetivo=None, mensaje=None):
-    return {
-        'metodo': metodo,
-        'exito': exito,
-        'estado': estado,
-        'variables': variables or {},
-        'valor_objetivo': valor_objetivo,
-        'mensaje': mensaje
-    }
-
 # Función para validar las entradas
 def validar_entrada(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
     try:
@@ -103,15 +79,6 @@ def validar_entrada(coef_objetivo, restricciones, tipo_restricciones, valores_re
 
 # Función para seleccionar el algoritmo
 def seleccionar_algoritmo():
-    opciones = {
-        '1': 'simplex',
-        '2': 'punto_interior',
-        '3': 'programacion_entera',
-        '4': 'dantzig_wolfe',
-        '5': 'relajacion_lagrangiana',
-        '6': 'auto'
-    }
-
     _imprimir("Seleccione el algoritmo que desea usar:", style="bold cyan")
     _imprimir("1. Método Simplex")
     _imprimir("2. Método de Pivoteo Interior (Método de Punto Interior)")
@@ -121,11 +88,35 @@ def seleccionar_algoritmo():
     _imprimir("6. Selección automática (si no sabes qué elegir)")
 
     opcion = _solicitar_texto("Ingrese el número del algoritmo")
-    while opcion not in opciones:
-        _imprimir("Opción inválida. Intente nuevamente.", style="bold red")
-        opcion = _solicitar_texto("Ingrese el número del algoritmo")
 
-    return opciones[opcion]
+    if opcion in ['1', '2', '3', '4', '5']:
+        return int(opcion)
+    else:
+        _imprimir(f"Función objetivo: Max z = {' + '.join(f'{coef}*x{i + 1}' for i, coef in enumerate(coef_objetivo))}")
+        for idx, (rest, signo, rhs) in enumerate(zip(restricciones, tipo_restricciones, valores_restricciones), start=1):
+            lhs = ' + '.join(f"{coef}*x{i + 1}" for i, coef in enumerate(rest))
+            _imprimir(f"Restricción {idx}: {lhs} {signo} {rhs}")
+
+    respuesta = _solicitar_texto("¿Desea continuar con estos datos? (s/n)").lower()
+    while respuesta not in {'s', 'n'}:
+        respuesta = _solicitar_texto("Responda con 's' para sí o 'n' para no").lower()
+    return respuesta == 's'
+
+
+def mostrar_resultado(resultado):
+    estilo = "bold green" if resultado.get('exito') else "bold yellow"
+    _imprimir(f"\nResultado ({ALGORITMOS_DISPONIBLES.get(resultado.get('metodo'), 'Algoritmo')})", style=estilo)
+    _imprimir(f"Estado: {resultado.get('estado')}")
+    if resultado.get('mensaje'):
+        _imprimir(resultado['mensaje'])
+
+    if resultado.get('variables'):
+        _imprimir("Variables óptimas:", style="bold")
+        for nombre, valor in resultado['variables'].items():
+            _imprimir(f"  {nombre} = {valor}")
+
+    if resultado.get('valor_objetivo') is not None:
+        _imprimir(f"Valor de la función objetivo: {resultado['valor_objetivo']}")
 
 
 def mostrar_menu_principal(datos):
@@ -221,22 +212,6 @@ def mostrar_resumen(coef_objetivo, restricciones, tipo_restricciones, valores_re
     while respuesta not in {'s', 'n'}:
         respuesta = _solicitar_texto("Responda con 's' para sí o 'n' para no").lower()
     return respuesta == 's'
-
-
-def mostrar_resultado(resultado):
-    estilo = "bold green" if resultado.get('exito') else "bold yellow"
-    _imprimir(f"\nResultado ({ALGORITMOS_DISPONIBLES.get(resultado.get('metodo'), 'Algoritmo')})", style=estilo)
-    _imprimir(f"Estado: {resultado.get('estado')}")
-    if resultado.get('mensaje'):
-        _imprimir(resultado['mensaje'])
-
-    if resultado.get('variables'):
-        _imprimir("Variables óptimas:", style="bold")
-        for nombre, valor in resultado['variables'].items():
-            _imprimir(f"  {nombre} = {valor}")
-
-    if resultado.get('valor_objetivo') is not None:
-        _imprimir(f"Valor de la función objetivo: {resultado['valor_objetivo']}")
 
 # Función para resolver con el Método de Pivoteo Interior
 def resolver_con_punto_interior(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
@@ -406,41 +381,68 @@ def todas_las_variables_son_enteras(tipo_variables):
 def problema_de_gran_escala(restricciones, num_variables):
     return len(restricciones) > 5 or num_variables > 5
 
-
-def resolver_modelo(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones,
-                    tipo_variables=None, metodo='auto'):
-    tipo_variables = tipo_variables or []
-    if metodo in {None, 'auto'}:
-        metodo = seleccionar_algoritmo_automaticamente(tipo_variables, restricciones)
-
-    dispatch = {
-        'simplex': resolver_simplex,
-        'punto_interior': resolver_con_punto_interior,
-        'programacion_entera': resolver_con_programacion_entera,
-        'dantzig_wolfe': resolver_con_dantzig_wolfe,
-        'relajacion_lagrangiana': resolver_con_relajacion_lagrangiana
-    }
-
-    solver = dispatch.get(metodo)
-    if not solver:
-        return _resultado_base(
-            metodo or 'desconocido',
-            False,
-            'Método no soportado',
-            mensaje='El algoritmo solicitado no está disponible.'
-        )
-
-    resultado = solver(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones)
-    if resultado.get('metodo') != metodo:
-        resultado['metodo'] = metodo
-    return resultado
-
 def datos_configurados(datos):
     coef = datos.get('coef_objetivo')
     tipos = datos.get('tipo_variables')
     restricciones = datos.get('restricciones')
     return bool(coef) and len(tipos) == len(coef) and bool(restricciones)
 
+
+# Función principal
+def main():
+    datos = {
+        'coef_objetivo': None,
+        'tipo_variables': [],
+        'restricciones': [],
+        'tipo_restricciones': [],
+        'valores_restricciones': []
+    }
+
+    while True:
+        opcion_menu = mostrar_menu_principal(datos)
+
+        if opcion_menu == '1':
+            datos['coef_objetivo'] = capturar_funcion_objetivo()
+            datos['tipo_variables'] = []  # Reiniciar pasos dependientes
+            datos['restricciones'] = []
+            datos['tipo_restricciones'] = []
+            datos['valores_restricciones'] = []
+        elif opcion_menu == '2':
+            if not datos.get('coef_objetivo'):
+                _imprimir("Primero configure la función objetivo.", style="bold red")
+                continue
+            datos['tipo_variables'] = capturar_tipo_variables(len(datos['coef_objetivo']))
+        elif opcion_menu == '3':
+            if not datos.get('coef_objetivo'):
+                _imprimir("Configure la función objetivo antes de capturar las restricciones.", style="bold red")
+                continue
+            restricciones, tipos, valores = capturar_restricciones(len(datos['coef_objetivo']))
+            datos['restricciones'] = restricciones
+            datos['tipo_restricciones'] = tipos
+            datos['valores_restricciones'] = valores
+        elif opcion_menu == '4':
+            if not datos_configurados(datos):
+                _imprimir("Complete los pasos anteriores antes de continuar.", style="bold red")
+                continue
+            continuar = mostrar_resumen(
+                datos['coef_objetivo'],
+                datos['restricciones'],
+                datos['tipo_restricciones'],
+                datos['valores_restricciones']
+            )
+            if continuar:
+                break
+            else:
+                _imprimir("Puede regresar al menú y editar los datos.", style="yellow")
+        elif opcion_menu == '0':
+            _imprimir("Hasta luego", style="bold")
+            return
+
+    coef_objetivo = datos['coef_objetivo']
+    tipo_variables = datos['tipo_variables']
+    restricciones = datos['restricciones']
+    tipo_restricciones = datos['tipo_restricciones']
+    valores_restricciones = datos['valores_restricciones']
 
 # Función principal
 def main():
