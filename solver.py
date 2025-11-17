@@ -72,10 +72,11 @@ def validar_entrada(coef_objetivo, restricciones, tipo_restricciones, valores_re
         if any(len(restriccion) != num_vars for restriccion in restricciones):
             raise ValueError("Todas las restricciones deben tener el mismo número de coeficientes que la función objetivo.")
 
-        return True, None
+        return True
 
     except Exception as e:
-        return False, str(e)
+        print(f"Error de validación: {e}")
+        return False
 
 # Función para seleccionar el algoritmo
 def seleccionar_algoritmo():
@@ -92,31 +93,8 @@ def seleccionar_algoritmo():
     if opcion in ['1', '2', '3', '4', '5']:
         return int(opcion)
     else:
-        _imprimir(f"Función objetivo: Max z = {' + '.join(f'{coef}*x{i + 1}' for i, coef in enumerate(coef_objetivo))}")
-        for idx, (rest, signo, rhs) in enumerate(zip(restricciones, tipo_restricciones, valores_restricciones), start=1):
-            lhs = ' + '.join(f"{coef}*x{i + 1}" for i, coef in enumerate(rest))
-            _imprimir(f"Restricción {idx}: {lhs} {signo} {rhs}")
-
-    respuesta = _solicitar_texto("¿Desea continuar con estos datos? (s/n)").lower()
-    while respuesta not in {'s', 'n'}:
-        respuesta = _solicitar_texto("Responda con 's' para sí o 'n' para no").lower()
-    return respuesta == 's'
-
-
-def mostrar_resultado(resultado):
-    estilo = "bold green" if resultado.get('exito') else "bold yellow"
-    _imprimir(f"\nResultado ({ALGORITMOS_DISPONIBLES.get(resultado.get('metodo'), 'Algoritmo')})", style=estilo)
-    _imprimir(f"Estado: {resultado.get('estado')}")
-    if resultado.get('mensaje'):
-        _imprimir(resultado['mensaje'])
-
-    if resultado.get('variables'):
-        _imprimir("Variables óptimas:", style="bold")
-        for nombre, valor in resultado['variables'].items():
-            _imprimir(f"  {nombre} = {valor}")
-
-    if resultado.get('valor_objetivo') is not None:
-        _imprimir(f"Valor de la función objetivo: {resultado['valor_objetivo']}")
+        print("Opción inválida o no elegida, seleccionando automáticamente el algoritmo...")
+        return 6  # El programa elegirá el algoritmo automáticamente
 
 
 def mostrar_menu_principal(datos):
@@ -241,22 +219,11 @@ def resolver_con_punto_interior(coef_objetivo, restricciones, tipo_restricciones
     )
 
     if res.success:
-        variables = _formatear_variables(res.x)
-        return _resultado_base(
-            'punto_interior',
-            True,
-            res.message or 'Optimal',
-            variables=variables,
-            valor_objetivo=-res.fun,
-            mensaje='Solución encontrada con el método de punto interior.'
-        )
-
-    return _resultado_base(
-        'punto_interior',
-        False,
-        res.message or 'Sin solución',
-        mensaje='No se encontró una solución óptima con el método de punto interior.'
-    )
+        for idx, valor in enumerate(res.x, start=1):
+            print(f"Cantidad óptima de x{idx}: {valor}")
+        print(f"Ganancia máxima: {-res.fun}")
+    else:
+        print("No se encontró una solución óptima con el método de punto interior.")
 
 # Utilidades para formulaciones con PuLP
 def _construir_restriccion_pulp(prob, expr, signo, rhs, nombre):
@@ -281,23 +248,13 @@ def resolver_simplex(coef_objetivo, restricciones, tipo_restricciones, valores_r
     prob.solve()
 
     estado = LpStatus.get(prob.status, "Inconnu")
+    print(f"Estado del solucionador (Simplex): {estado}")
     if estado == "Optimal":
-        valores = {var.name: var.varValue for var in variables}
-        return _resultado_base(
-            'simplex',
-            True,
-            estado,
-            variables=valores,
-            valor_objetivo=value(prob.objective),
-            mensaje='Solución encontrada con el método Simplex.'
-        )
-
-    return _resultado_base(
-        'simplex',
-        False,
-        estado,
-        mensaje='No se encontró una solución óptima con el método Simplex.'
-    )
+        for var in variables:
+            print(f"{var.name} = {var.varValue}")
+        print(f"Valor óptimo de la función objetivo: {value(prob.objective)}")
+    else:
+        print("No se encontró una solución óptima con el método Simplex.")
 
 
 # Función para resolver con el Método de Programación Entera (Branch and Bound)
@@ -314,47 +271,23 @@ def resolver_con_programacion_entera(coef_objetivo, restricciones, tipo_restricc
     prob.solve()
 
     estado = LpStatus.get(prob.status, "Inconnu")
+    print(f"Estado del solucionador (Programación Entera): {estado}")
     if estado == "Optimal":
-        valores = {var.name: var.varValue for var in variables}
-        return _resultado_base(
-            'programacion_entera',
-            True,
-            estado,
-            variables=valores,
-            valor_objetivo=value(prob.objective),
-            mensaje='Solución encontrada con programación entera.'
-        )
-
-    return _resultado_base(
-        'programacion_entera',
-        False,
-        estado,
-        mensaje='No se encontró una solución óptima en programación entera.'
-    )
+        for var in variables:
+            print(f"{var.name} = {var.varValue}")
+        print(f"Ganancia máxima: {value(prob.objective)}")
+    else:
+        print("No se encontró una solución óptima en el método de programación entera.")
 
 
 def resolver_con_dantzig_wolfe(*_args, **_kwargs):
-    return _resultado_base(
-        'dantzig_wolfe',
-        False,
-        'NotImplemented',
-        mensaje=(
-            "El método de Descomposición de Dantzig-Wolfe aún no está implementado. "
-            "Puedes seleccionar otro algoritmo mientras se desarrolla esta característica."
-        )
-    )
+    print("El método de Descomposición de Dantzig-Wolfe aún no está implementado."
+          " Esta función actúa como placeholder para futuras extensiones.")
 
 
 def resolver_con_relajacion_lagrangiana(*_args, **_kwargs):
-    return _resultado_base(
-        'relajacion_lagrangiana',
-        False,
-        'NotImplemented',
-        mensaje=(
-            "El método de Relajación Lagrangiana aún no está implementado. "
-            "Puedes seleccionar otro algoritmo mientras se desarrolla esta característica."
-        )
-    )
+    print("El método de Relajación Lagrangiana aún no está implementado."
+          " Puedes seleccionar otro algoritmo mientras se desarrolla esta característica.")
 
 # Función para resolver el problema automáticamente
 def seleccionar_algoritmo_automaticamente(tipo_variables, restricciones):
@@ -444,77 +377,40 @@ def main():
     tipo_restricciones = datos['tipo_restricciones']
     valores_restricciones = datos['valores_restricciones']
 
-# Función principal
-def main():
-    datos = {
-        'coef_objetivo': None,
-        'tipo_variables': [],
-        'restricciones': [],
-        'tipo_restricciones': [],
-        'valores_restricciones': []
-    }
-
-    while True:
-        opcion_menu = mostrar_menu_principal(datos)
-
-        if opcion_menu == '1':
-            datos['coef_objetivo'] = capturar_funcion_objetivo()
-            datos['tipo_variables'] = []  # Reiniciar pasos dependientes
-            datos['restricciones'] = []
-            datos['tipo_restricciones'] = []
-            datos['valores_restricciones'] = []
-        elif opcion_menu == '2':
-            if not datos.get('coef_objetivo'):
-                _imprimir("Primero configure la función objetivo.", style="bold red")
-                continue
-            datos['tipo_variables'] = capturar_tipo_variables(len(datos['coef_objetivo']))
-        elif opcion_menu == '3':
-            if not datos.get('coef_objetivo'):
-                _imprimir("Configure la función objetivo antes de capturar las restricciones.", style="bold red")
-                continue
-            restricciones, tipos, valores = capturar_restricciones(len(datos['coef_objetivo']))
-            datos['restricciones'] = restricciones
-            datos['tipo_restricciones'] = tipos
-            datos['valores_restricciones'] = valores
-        elif opcion_menu == '4':
-            if not datos_configurados(datos):
-                _imprimir("Complete los pasos anteriores antes de continuar.", style="bold red")
-                continue
-            continuar = mostrar_resumen(
-                datos['coef_objetivo'],
-                datos['restricciones'],
-                datos['tipo_restricciones'],
-                datos['valores_restricciones']
-            )
-            if continuar:
-                break
-            else:
-                _imprimir("Puede regresar al menú y editar los datos.", style="yellow")
-        elif opcion_menu == '0':
-            _imprimir("Hasta luego", style="bold")
-            return
-
-    coef_objetivo = datos['coef_objetivo']
-    tipo_variables = datos['tipo_variables']
-    restricciones = datos['restricciones']
-    tipo_restricciones = datos['tipo_restricciones']
-    valores_restricciones = datos['valores_restricciones']
-
-    valido, error = validar_entrada(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones)
-    if not valido:
-        _imprimir(f"Error de validación: {error}", style="bold red")
+    if not validar_entrada(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
         return
 
-    metodo = seleccionar_algoritmo()
-    resultado = resolver_modelo(
-        coef_objetivo,
-        restricciones,
-        tipo_restricciones,
-        valores_restricciones,
-        tipo_variables=tipo_variables,
-        metodo=metodo
-    )
-    mostrar_resultado(resultado)
+    # Selección del algoritmo
+    opcion = seleccionar_algoritmo()
+
+    if opcion == 1:
+        print("Usando el Método Simplex...")
+        resolver_simplex(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones, max_iter=5)
+    elif opcion == 2:
+        print("Usando el Método de Pivoteo Interior...")
+        resolver_con_punto_interior(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones)
+    elif opcion == 3:
+        print("Usando el Método de Programación Entera...")
+        resolver_con_programacion_entera(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones)
+    elif opcion == 4:
+        print("Usando el Método de Descomposición de Dantzig-Wolfe...")
+        resolver_con_dantzig_wolfe(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones)
+    elif opcion == 5:
+        print("Usando el Método de Relajación Lagrangiana...")
+        resolver_con_relajacion_lagrangiana(coef_objetivo, restricciones, valores_restricciones)
+    elif opcion == 6:
+        print("El programa elegirá el algoritmo adecuado automáticamente...")
+        metodo = seleccionar_algoritmo_automaticamente(tipo_variables, restricciones)
+        print(f"Algoritmo seleccionado automáticamente: {metodo}")
+        # Aquí puedes decidir qué algoritmo ejecutar basado en la selección automática
+        if metodo == "simplex":
+            resolver_simplex(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones, max_iter=5)
+        elif metodo == "programacion_entera":
+            resolver_con_programacion_entera(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones)
+        elif metodo == "punto_interior":
+            resolver_con_punto_interior(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones)
+        elif metodo == "dantzig_wolfe":
+            resolver_con_dantzig_wolfe(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones)
 
 if __name__ == "__main__":
     main()
