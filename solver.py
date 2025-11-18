@@ -1,3 +1,11 @@
+"""Colección de utilidades y algoritmos para resolver modelos de optimización.
+
+El archivo concentra tanto el asistente interactivo de consola (entradas, menús y
+resumen de datos) como las implementaciones de cada solver disponible. La idea es
+mantener toda la lógica de negocio centralizada aquí para que pueda ser consumida
+por cualquier interfaz (CLI, Streamlit u otras integraciones futuras).
+"""
+
 from pulp import LpMaximize, LpMinimize, LpProblem, LpVariable, LpStatus, value
 from scipy.optimize import linprog
 
@@ -25,6 +33,8 @@ ALGORITMOS_DISPONIBLES = {
 
 
 def _imprimir(texto, style=None):
+    """Imprime texto usando Rich si está disponible, o recurre a print estándar."""
+
     if console:
         console.print(texto, style=style)
     else:
@@ -32,12 +42,16 @@ def _imprimir(texto, style=None):
 
 
 def _solicitar_texto(mensaje):
+    """Pide una entrada de texto mostrando un mensaje homogéneo en toda la CLI."""
+
     if Prompt:
         return Prompt.ask(mensaje)
     return input(f"{mensaje}\n> ").strip()
 
 
 def _solicitar_entero(mensaje, minimo=1):
+    """Solicita un entero validando que cumpla el mínimo requerido."""
+
     while True:
         try:
             if IntPrompt:
@@ -52,6 +66,8 @@ def _solicitar_entero(mensaje, minimo=1):
 
 
 def _solicitar_lista_floats(mensaje):
+    """Convierte una entrada separada por espacios en una lista de flotantes."""
+
     while True:
         entrada = _solicitar_texto(mensaje)
         try:
@@ -64,10 +80,14 @@ def _solicitar_lista_floats(mensaje):
 
 
 def _formatear_variables(valores):
+    """Asigna nombres x1, x2, ... a una secuencia de valores numéricos."""
+
     return {f"x{i + 1}": valor for i, valor in enumerate(valores)}
 
 
 def _resultado_base(metodo, exito, estado, variables=None, valor_objetivo=None, mensaje=None):
+    """Crea el diccionario homogéneo con el que responden todos los algoritmos."""
+
     return {
         'metodo': metodo,
         'exito': exito,
@@ -77,8 +97,9 @@ def _resultado_base(metodo, exito, estado, variables=None, valor_objetivo=None, 
         'mensaje': mensaje
     }
 
-# Función para validar las entradas
 def validar_entrada(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
+    """Realiza comprobaciones básicas antes de intentar resolver el modelo."""
+
     try:
         if not isinstance(coef_objetivo, list) or not all(isinstance(i, (int, float)) for i in coef_objetivo):
             raise ValueError("Los coeficientes de la función objetivo deben ser una lista de números.")
@@ -94,15 +115,19 @@ def validar_entrada(coef_objetivo, restricciones, tipo_restricciones, valores_re
 
         num_vars = len(coef_objetivo)
         if any(len(restriccion) != num_vars for restriccion in restricciones):
-            raise ValueError("Todas las restricciones deben tener el mismo número de coeficientes que la función objetivo.")
+            raise ValueError(
+                "Todas las restricciones deben tener el mismo número de coeficientes que la función objetivo."
+            )
 
         return True, None
 
     except Exception as e:
         return False, str(e)
 
-# Función para seleccionar el algoritmo
+
 def seleccionar_algoritmo():
+    """Muestra las opciones de solver disponibles y devuelve la clave interna elegida."""
+
     opciones = {
         '1': 'simplex',
         '2': 'punto_interior',
@@ -129,6 +154,8 @@ def seleccionar_algoritmo():
 
 
 def mostrar_menu_principal(datos):
+    """Pinta el menú principal del asistente e indica pasos completados."""
+
     opciones = [
         ("1", "Configurar función objetivo", bool(datos.get('coef_objetivo'))),
         ("2", "Definir tipo de variables", len(datos.get('tipo_variables', [])) == len(datos.get('coef_objetivo') or [])),
@@ -153,10 +180,14 @@ def mostrar_menu_principal(datos):
 
 
 def capturar_funcion_objetivo():
+    """Devuelve la lista de coeficientes de la función objetivo capturada por CLI."""
+
     return _solicitar_lista_floats("Ingrese los coeficientes de la función objetivo (separados por espacio)")
 
 
 def capturar_tipo_variables(num_variables):
+    """Pide el tipo (continua/entera) para cada variable del modelo."""
+
     tipos = []
     for idx in range(num_variables):
         tipo = _solicitar_texto(f"Tipo de la variable x{idx + 1} (continua/entera)").strip().lower()
@@ -168,6 +199,8 @@ def capturar_tipo_variables(num_variables):
 
 
 def capturar_restricciones(num_variables):
+    """Recoge coeficientes, signo y RHS para todas las restricciones del problema."""
+
     num_restricciones = _solicitar_entero("¿Cuántas restricciones tiene el problema?", minimo=1)
     restricciones, tipos, valores = [], [], []
 
@@ -195,6 +228,8 @@ def capturar_restricciones(num_variables):
 
 
 def mostrar_resumen(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
+    """Muestra tabla/resumen textual y pregunta si se desea continuar."""
+
     _imprimir("\nResumen del modelo ingresado", style="bold cyan")
     num_vars = len(coef_objetivo)
     headers = [f"x{i + 1}" for i in range(num_vars)]
@@ -224,6 +259,8 @@ def mostrar_resumen(coef_objetivo, restricciones, tipo_restricciones, valores_re
 
 
 def mostrar_resultado(resultado):
+    """Imprime en consola el resumen del solver ejecutado y sus métricas."""
+
     estilo = "bold green" if resultado.get('exito') else "bold yellow"
     _imprimir(f"\nResultado ({ALGORITMOS_DISPONIBLES.get(resultado.get('metodo'), 'Algoritmo')})", style=estilo)
     _imprimir(f"Estado: {resultado.get('estado')}")
@@ -238,12 +275,14 @@ def mostrar_resultado(resultado):
     if resultado.get('valor_objetivo') is not None:
         _imprimir(f"Valor de la función objetivo: {resultado['valor_objetivo']}")
 
-# Función para resolver con el Método de Pivoteo Interior
 def resolver_con_punto_interior(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
+    """Implementa una formulación estándar y llama a SciPy para resolverla."""
+
     c = [-coef for coef in coef_objetivo]
     A_ub, b_ub, A_eq, b_eq = [], [], [], []
 
     for restriccion, signo, valor in zip(restricciones, tipo_restricciones, valores_restricciones):
+        # SciPy espera el formato estándar Ax <= b; convertimos cada restricción.
         if signo == '<=':
             A_ub.append(restriccion)
             b_ub.append(valor)
@@ -254,6 +293,7 @@ def resolver_con_punto_interior(coef_objetivo, restricciones, tipo_restricciones
             A_eq.append(restriccion)
             b_eq.append(valor)
 
+    # El asistente únicamente modela variables con cota inferior cero.
     bounds = [(0, None) for _ in coef_objetivo]
     res = linprog(
         c,
@@ -283,8 +323,9 @@ def resolver_con_punto_interior(coef_objetivo, restricciones, tipo_restricciones
         mensaje='No se encontró una solución óptima con el método de punto interior.'
     )
 
-# Utilidades para formulaciones con PuLP
 def _construir_restriccion_pulp(prob, expr, signo, rhs, nombre):
+    """Añade la restricción apropiada al modelo PuLP indicado."""
+
     if signo == '<=':
         prob += expr <= rhs, nombre
     elif signo == '>=':
@@ -294,9 +335,12 @@ def _construir_restriccion_pulp(prob, expr, signo, rhs, nombre):
 
 
 def resolver_simplex(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones, max_iter=None):
+    """Resuelve un modelo de maximización continuo mediante PuLP Simplex."""
+
     prob = LpProblem("Metodo_Simplex", LpMaximize)
     variables = [LpVariable(f"x{i+1}", lowBound=0, cat='Continuous') for i in range(len(coef_objetivo))]
 
+    # Maximiza z = c^T x.
     prob += sum(coef * var for coef, var in zip(coef_objetivo, variables)), "Funcion_Objetivo"
 
     for idx, (restriccion, signo, valor) in enumerate(zip(restricciones, tipo_restricciones, valores_restricciones), start=1):
@@ -325,8 +369,9 @@ def resolver_simplex(coef_objetivo, restricciones, tipo_restricciones, valores_r
     )
 
 
-# Función para resolver con el Método de Programación Entera (Branch and Bound)
 def resolver_con_programacion_entera(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
+    """Configura el mismo modelo pero usando variables enteras (Branch and Bound)."""
+
     prob = LpProblem("Optimizacion_Entera", LpMaximize)
     variables = [LpVariable(f"x{i+1}", lowBound=0, cat='Integer') for i in range(len(coef_objetivo))]
 
@@ -359,6 +404,8 @@ def resolver_con_programacion_entera(coef_objetivo, restricciones, tipo_restricc
 
 
 def _normalizar_restricciones_en_menor_igual(restricciones, tipo_restricciones, valores_restricciones):
+    """Convierte >= y = en restricciones equivalentes en formato <=."""
+
     restricciones_normalizadas = []
     valores_normalizados = []
 
@@ -379,6 +426,8 @@ def _normalizar_restricciones_en_menor_igual(restricciones, tipo_restricciones, 
 
 
 def resolver_con_algoritmo_dual(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
+    """Construye explícitamente el dual y lo resuelve como minimización en PuLP."""
+
     restricciones_canonicas, rhs_canonicos = _normalizar_restricciones_en_menor_igual(
         restricciones, tipo_restricciones, valores_restricciones
     )
@@ -427,6 +476,8 @@ def resolver_con_algoritmo_dual(coef_objetivo, restricciones, tipo_restricciones
 
 
 def resolver_con_relajacion_lagrangiana(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones):
+    """Aplica penalizaciones a las violaciones de restricciones para flexibilizar el modelo."""
+
     restricciones_canonicas, rhs_canonicos = _normalizar_restricciones_en_menor_igual(
         restricciones, tipo_restricciones, valores_restricciones
     )
@@ -435,6 +486,7 @@ def resolver_con_relajacion_lagrangiana(coef_objetivo, restricciones, tipo_restr
     variables = [LpVariable(f"x{i+1}", lowBound=0, cat='Continuous') for i in range(len(coef_objetivo))]
     slacks = [LpVariable(f"s_relaj_{i+1}", lowBound=0, cat='Continuous') for i in range(len(restricciones_canonicas))]
 
+    # Penalizamos con suficiente peso las holguras para desalentar violaciones.
     penalizacion = max(10.0, 10 * sum(abs(c) for c in coef_objetivo) or 1.0)
     prob += (
         sum(coef * var for coef, var in zip(coef_objetivo, variables))
@@ -472,8 +524,9 @@ def resolver_con_relajacion_lagrangiana(coef_objetivo, restricciones, tipo_restr
         mensaje='No se logró resolver la relajación lagrangiana con los parámetros actuales.'
     )
 
-# Función para resolver el problema automáticamente
 def seleccionar_algoritmo_automaticamente(tipo_variables, restricciones):
+    """Regresa la heurística escogida cuando el usuario pide selección automática."""
+
     if todas_las_variables_son_continuas(tipo_variables):
         return "simplex"
     elif todas_las_variables_son_enteras(tipo_variables):
@@ -483,23 +536,28 @@ def seleccionar_algoritmo_automaticamente(tipo_variables, restricciones):
     else:
         return "algoritmo_dual"
 
-# Funciones auxiliares
-
-# Verifica si todas las variables son continuas
 def todas_las_variables_son_continuas(tipo_variables):
+    """Comprueba si no hay variables enteras declaradas en el modelo."""
+
     return all(tipo == 'continua' for tipo in tipo_variables)
 
-# Verifica si todas las variables son enteras
+
 def todas_las_variables_son_enteras(tipo_variables):
+    """Comprueba si todas las variables fueron declaradas como enteras."""
+
     return all(tipo == 'entera' for tipo in tipo_variables)
 
-# Verifica si el problema es de gran escala (si tiene más de 5 restricciones o variables)
+
 def problema_de_gran_escala(restricciones, num_variables):
+    """Define una heurística simple para detectar instancias medianas/grandes."""
+
     return len(restricciones) > 5 or num_variables > 5
 
 
 def resolver_modelo(coef_objetivo, restricciones, tipo_restricciones, valores_restricciones,
                     tipo_variables=None, metodo='auto'):
+    """Punto de entrada único para resolver desde cualquier interfaz."""
+
     tipo_variables = tipo_variables or []
     if metodo in {None, 'auto'}:
         metodo = seleccionar_algoritmo_automaticamente(tipo_variables, restricciones)
@@ -527,14 +585,17 @@ def resolver_modelo(coef_objetivo, restricciones, tipo_restricciones, valores_re
     return resultado
 
 def datos_configurados(datos):
+    """Ayuda a determinar si el asistente ya tiene la información mínima."""
+
     coef = datos.get('coef_objetivo')
     tipos = datos.get('tipo_variables')
     restricciones = datos.get('restricciones')
     return bool(coef) and len(tipos) == len(coef) and bool(restricciones)
 
 
-# Función principal
 def main():
+    """Ejecuta el asistente de consola hasta capturar el modelo y resolverlo."""
+
     datos = {
         'coef_objetivo': None,
         'tipo_variables': [],
