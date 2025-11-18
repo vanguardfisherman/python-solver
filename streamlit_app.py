@@ -1,4 +1,9 @@
-"""Interfaz web de Streamlit para interactuar con solver.py"""
+"""Interfaz web de Streamlit que reutiliza los algoritmos definidos en ``solver.py``.
+
+El objetivo es ofrecer una experiencia similar al asistente de consola pero con
+controles visuales, validaciones inmediatas y un resumen tabular antes de
+resolver el modelo.
+"""
 
 import pandas as pd
 import streamlit as st
@@ -45,6 +50,7 @@ st.markdown(
 
 with st.sidebar:
     st.header("Parámetros generales")
+    # Estos valores definen cuántos campos dinámicos aparecerán en el formulario.
     num_variables = int(
         st.number_input("Número de variables", min_value=1, max_value=10, value=2, step=1)
     )
@@ -64,6 +70,7 @@ with st.sidebar:
     metodo_seleccionado = opciones_algoritmo[algoritmo_label]
 
 with st.form("configuracion_modelo"):
+    # Agrupamos la captura de datos para validar/enviar todo en un único submit.
     st.subheader("Función objetivo (Maximizar)")
     coef_objetivo = []
     for i in range(num_variables):
@@ -126,6 +133,7 @@ with st.form("configuracion_modelo"):
     )
 
 st.subheader("Resumen del modelo")
+# Mostramos un resumen de todo lo capturado antes de resolver.
 if coef_objetivo:
     st.write("Función objetivo: ")
     st.latex(
@@ -146,6 +154,7 @@ if restricciones:
     st.table(df_resumen)
 
 if submitted:
+    # Validamos la consistencia de los datos antes de ejecutar cualquier algoritmo.
     valido, error = validar_entrada(
         coef_objetivo, restricciones, tipo_restricciones, valores_restricciones
     )
@@ -154,6 +163,7 @@ if submitted:
     else:
         metodo = metodo_seleccionado
         if metodo == "auto":
+            # Reutilizamos la heurística definida en solver.py para escoger el mejor método.
             metodo = seleccionar_algoritmo_automaticamente(tipo_variables, restricciones)
             st.info(
                 f"Selección automática: se ejecutará {ALGORITMOS_DISPONIBLES.get(metodo, metodo)}"
