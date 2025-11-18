@@ -1,8 +1,15 @@
-"""Interfaz web de Streamlit que reutiliza los algoritmos definidos en ``solver.py``.
+"""Interfaz web construida con Streamlit sobre los servicios de ``solver.py``.
 
-El objetivo es ofrecer una experiencia similar al asistente de consola pero con
-controles visuales, validaciones inmediatas y un resumen tabular antes de
-resolver el modelo.
+El archivo actúa como una “capa de presentación” que hace lo siguiente:
+
+1. Configura una página ancha con estilos personalizados para los botones.
+2. Utiliza la barra lateral como asistente resumido (cantidad de variables,
+   restricciones y algoritmo deseado).
+3. Muestra un formulario con todos los coeficientes/tipos y, antes de resolver,
+   enseña un resumen tabular para que el estudiante verifique su modelo.
+
+No contiene lógica matemática propia: cada validación y algoritmo se delega al
+módulo ``solver``, garantizando que CLI y web se comporten igual.
 """
 
 import pandas as pd
@@ -15,6 +22,9 @@ from solver import (
     validar_entrada,
 )
 
+# ---------------------------------------------------------------------------
+# Configuración general de la página
+# ---------------------------------------------------------------------------
 st.set_page_config(page_title="Solver de Programación Lineal", layout="wide")
 st.title("Asistente interactivo de optimización")
 st.write(
@@ -22,6 +32,7 @@ st.write(
     "ejecuta el algoritmo que prefieras sin salir del navegador."
 )
 
+# Aplicamos un pequeño tema para que el botón de envío sea más atractivo.
 st.markdown(
     """
     <style>
@@ -49,6 +60,9 @@ st.markdown(
 )
 
 with st.sidebar:
+    # -----------------------------------------------------------------------
+    # Asistente rápido en la barra lateral
+    # -----------------------------------------------------------------------
     st.header("Parámetros generales")
     # Estos valores definen cuántos campos dinámicos aparecerán en el formulario.
     num_variables = int(
@@ -70,6 +84,9 @@ with st.sidebar:
     metodo_seleccionado = opciones_algoritmo[algoritmo_label]
 
 with st.form("configuracion_modelo"):
+    # -----------------------------------------------------------------------
+    # Formulario principal (función objetivo, tipos y restricciones)
+    # -----------------------------------------------------------------------
     # Agrupamos la captura de datos para validar/enviar todo en un único submit.
     st.subheader("Función objetivo (Maximizar)")
     coef_objetivo = []
@@ -133,7 +150,8 @@ with st.form("configuracion_modelo"):
     )
 
 st.subheader("Resumen del modelo")
-# Mostramos un resumen de todo lo capturado antes de resolver.
+# Mostramos un resumen de todo lo capturado antes de resolver. Es equivalente
+# a la tabla que se enseña en la CLI con Rich, pero en versión tabular.
 if coef_objetivo:
     st.write("Función objetivo: ")
     st.latex(
@@ -154,6 +172,9 @@ if restricciones:
     st.table(df_resumen)
 
 if submitted:
+    # -----------------------------------------------------------------------
+    # Validación y ejecución (solo ocurre si se pulsó el botón del formulario)
+    # -----------------------------------------------------------------------
     # Validamos la consistencia de los datos antes de ejecutar cualquier algoritmo.
     valido, error = validar_entrada(
         coef_objetivo, restricciones, tipo_restricciones, valores_restricciones
