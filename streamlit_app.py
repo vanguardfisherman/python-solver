@@ -88,7 +88,7 @@ with st.form("configuracion_modelo"):
     # Formulario principal (función objetivo, tipos y restricciones)
     # -----------------------------------------------------------------------
     # Agrupamos la captura de datos para validar/enviar todo en un único submit.
-    st.subheader("Función objetivo (Maximizar)")
+    st.subheader("Función objetivo ")
     coef_objetivo = []
     for i in range(num_variables):
         coef = st.number_input(
